@@ -23,69 +23,90 @@ app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-app.post("/measure", upload.single("image"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "Field tidak boleh kosong" });
+// Ubah upload.single menjadi upload.array untuk mendukung multiple file
+app.post("/measure", upload.array("images"), (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: "Tidak ada gambar yang diunggah" });
   }
-  const ext = path.extname(req.file.originalname);
-  const imagePath = path.join(__dirname, req.file.path);
-  const outputImageFilename = req.file.filename.replace(ext, "_output" + ext);
-  const outputImagePath = path.join(__dirname, "uploads", outputImageFilename);
 
-  const pythonProcess = spawn("python", ["../modeling/main.py", imagePath]);
+  const results = [];
+  const processFile = (file, callback) => {
+    const ext = path.extname(file.originalname);
+    const imagePath = path.join(__dirname, file.path);
+    const outputImageFilename = file.filename.replace(ext, "_output" + ext);
+    const outputImagePath = path.join(
+      __dirname,
+      "uploads",
+      outputImageFilename
+    );
 
-  let stdout = "";
-  let stderr = "";
+    const pythonProcess = spawn("python", ["../modeling/main.py", imagePath]);
 
-  pythonProcess.stdout.on("data", (data) => {
-    stdout += data.toString();
-  });
+    let stdout = "";
+    let stderr = "";
 
-  pythonProcess.stderr.on("data", (data) => {
-    stderr += data.toString();
-  });
+    pythonProcess.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
 
-  pythonProcess.on("close", (code) => {
-    if (code !== 0) {
-      console.error("Script Python keluar dengan kode", code);
-      return res.status(500).json({ error: "Gagal memproses gambar" });
-    }
+    pythonProcess.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
 
-    if (stderr) {
-      console.error("Script Python stderr:", stderr);
-    }
-
-    console.log("Script Python stdout:", stdout);
-
-    if (fs.existsSync(outputImagePath)) {
-      const [boundingBoxAreaCm2, widthCm, heightCm] = stdout
-        .split(",")
-        .map(Number);
-
-      if (isNaN(boundingBoxAreaCm2) || isNaN(widthCm) || isNaN(heightCm)) {
-        console.error("Hasil tidak valid dari script Python:", stdout);
-        return res
-          .status(500)
-          .json({ error: "Hasil tidak valid dari script Python" });
+    pythonProcess.on("close", (code) => {
+      if (code !== 0) {
+        console.error("Script Python keluar dengan kode", code);
+        callback({ error: "Gagal memproses gambar" });
+        return;
       }
 
-      const outputImageUrl = `https://api2.hkks.shop/uploads/${outputImageFilename}`;
+      if (stderr) {
+        console.error("Script Python stderr:", stderr);
+      }
 
-      res.json({
-        data: {
+      console.log("Script Python stdout:", stdout);
+
+      if (fs.existsSync(outputImagePath)) {
+        const [boundingBoxAreaCm2, widthCm, heightCm] = stdout
+          .split(",")
+          .map(Number);
+
+        if (isNaN(boundingBoxAreaCm2) || isNaN(widthCm) || isNaN(heightCm)) {
+          console.error("Hasil tidak valid dari script Python:", stdout);
+          callback({ error: "Hasil tidak valid dari script Python" });
+          return;
+        }
+
+        // const outputImageUrl = `https://api2.hkks.shop/uploads/${outputImageFilename}`;
+        const outputImageUrl = `http://localhost:5000/uploads/${outputImageFilename}`;
+        results.push({
           luas: boundingBoxAreaCm2,
           lebar: widthCm,
           tinggi: heightCm,
           url: outputImageUrl,
-        },
-      });
-    } else {
-      console.error("Gambar output tidak ditemukan:", outputImagePath);
-      res.status(500).json({ error: "Gambar output tidak ditemukan" });
-    }
+        });
+        callback();
+      } else {
+        console.error("Gambar output tidak ditemukan:", outputImagePath);
+        callback({ error: "Gambar output tidak ditemukan" });
+      }
 
-    fs.unlink(imagePath, (err) => {
-      if (err) console.error("Error menghapus gambar yang diunggah:", err);
+    
+    });
+  };
+
+  let remainingFiles = req.files.length;
+
+  req.files.forEach((file) => {
+    processFile(file, (error) => {
+      if (error) {
+        return res.status(500).json({ error: error.error });
+      }
+
+      remainingFiles--;
+      if (remainingFiles === 0) {
+        res.json({ data: results });
+      }
     });
   });
 });

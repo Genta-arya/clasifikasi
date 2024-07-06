@@ -29,7 +29,7 @@ def measure_leaf_area(image_path, pixels_per_cm=42):
     cv2.line(image, (x, y + h), (x + w, y + h), red, 4)
 
     # Tambahkan teks informasi
-    area_text = f'Luas: {bounding_box_area_cm2:.2f} cm'
+    area_text = f'Luas: {bounding_box_area_cm2:.2f} cm²'
     width_text = f'Lebar: {width_cm:.2f} cm'
     height_text = f'Tinggi: {height_cm:.2f} cm'
 
@@ -75,11 +75,15 @@ def measure_leaf_area(image_path, pixels_per_cm=42):
     cv2.imwrite(output_image_path, squared_image)
     
     # Print results for debugging
-    print(f'{bounding_box_area_cm2},{width_cm},{height_cm}')
+    print(f'{bounding_box_area_cm2},{width_cm},{height_cm},{output_image_path}')
+
+def main(image_paths):
+    for image_path in image_paths:
+        measure_leaf_area(image_path)
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python main.py <image_path>")
+    if len(sys.argv) < 2:
+        print("Usage: python main.py <image_path1> <image_path2> ...")
         sys.exit(1)
-    image_path = sys.argv[1]
-    measure_leaf_area(image_path)
+    image_paths = sys.argv[1:]
+    main(image_paths)
