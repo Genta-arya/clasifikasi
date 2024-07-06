@@ -77,8 +77,8 @@ app.post("/measure", upload.array("images"), (req, res) => {
           return;
         }
 
-        // const outputImageUrl = `https://api2.hkks.shop/uploads/${outputImageFilename}`;
-        const outputImageUrl = `http://localhost:5000/uploads/${outputImageFilename}`;
+        const outputImageUrl = `https://api2.hkks.shop/uploads/${outputImageFilename}`;
+        // const outputImageUrl = `http://localhost:5000/uploads/${outputImageFilename}`;
         results.push({
           luas: boundingBoxAreaCm2,
           lebar: widthCm,
